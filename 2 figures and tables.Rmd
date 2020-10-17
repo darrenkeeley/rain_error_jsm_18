@@ -91,7 +91,7 @@ Code for Table 1. Calculate MARE by city for cut point = 0.01.
 ```{r}
 table_1 <- rain_metrics[,c('city','re','re_rank')] %>% arrange(city)
 
-write.csv(table_1,'table01 rain error.csv')
+write.csv(table_1,'data/table01 rain error.csv')
 ```
 
 
