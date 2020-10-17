@@ -128,15 +128,236 @@ hist_weather_agg$CloudCover[hist_weather_agg$CloudCover<0] <- 0
 ```
 
 
-## Join datasets for export
+## Join dataframes for graphs
 
-Also remove dataframes that aren't needed in subsequent rmd.
+Creates dataframe weather_export for graphics used in rmd 2. Also remove dataframes that aren't needed in subsequent rmd.
 
 ```{r}
 weather_export <- inner_join(forecast_2, hist_weather_agg,
                              by = c("city" = "city", "target_date" = "Date"))
-
-rm(forecast, forecast_wide)
 ```
 
 
+## Rain Metrics dataset
+
+Compare cities by rainy days per year, average precipitation per rainy day, precipitation per year, and avg rain error. Create dataframes for each of these metrics separately and then join them.
+
+rainy_days_py: Rainy days per year
+
+```{r}
+hist_weather_agg2 <- hist_weather_agg %>% 
+  mutate(Precip = PrecipIn >= .01) %>% 
+  as.data.table()
+
+rainy <- hist_weather_agg2[,j=list(mean(Precip, na.rm=T)*365),by=list(city)] %>% 
+  arrange(desc(V1))
+rainy <- rainy %>% rename(rainy_days_py = V1)
+
+rainy$rainy_days_py_rank <- 1:nrow(rainy)
+
+rainy <- arrange(rainy, city)
+
+head(rainy)
+```
+
+avg_precip_in: Avg in of rain on rainy days. Answers question, when it rains does it pour?
+
+```{r}
+rainpour <- filter(hist_weather_agg2, Precip==T)
+rainpour <- as.data.table(rainpour)
+
+rainpour <- rainpour[,j=list(mean(PrecipIn, na.rm=T)),by=list(city)] %>% 
+  arrange(desc(V1))
+rainpour <- rainpour %>% rename(avg_precip_in = V1)
+
+rainpour$avg_precip_in_rank <- 1:nrow(rainpour)
+
+rainpour <- arrange(rainpour, city)
+
+head(rainpour)
+```
+
+
+precip_in_py: Total inches of precipitation in a year. Sum of PrecipIn per year. Only two years have complete data: 2015 and 2016. Avg those two years. Rough estimate bc some days are missing. St. George also has no 2016 data. Answers question, what are the raniest cities?
+
+```{r}
+rain_per_year <- hist_weather_agg2 %>% 
+  filter(Date >= "2015-01-01", Date <= "2016-12-13") %>% 
+  as.data.table()
+
+rain_per_year <- rain_per_year[,j=list(mean(PrecipIn, na.rm=T)*365),by=list(city)] %>% 
+  arrange(desc(V1))
+rain_per_year <- rain_per_year %>% rename(precip_in_py = V1)
+
+rain_per_year$precip_in_py_rank <- 1:nrow(rain_per_year)
+
+rain_per_year <- arrange(rain_per_year, city)
+
+head(rain_per_year)
+```
+
+
+Number of trace rain days across all days in data (more than 1 year)
+
+```{r}
+trace_rain <- as.data.table(hist_weather[hist_weather$PrecipInT=='T',])
+trace_rain <- data.frame(table(trace_rain$city))
+colnames(trace_rain) <- c("city", "count_trace_days")
+
+trace_rain <- arrange(trace_rain, desc(count_trace_days))
+trace_rain$count_trace_days_rank <- 1:nrow(trace_rain)
+
+head(trace_rain)
+```
+
+
+Proportion of Trace rain days.
+
+```{r}
+prop_trace <- hist_weather
+prop_trace$trace <- prop_trace$PrecipInT == 'T'
+prop_trace <- as.data.table(prop_trace)
+prop_trace <- prop_trace[,j=list(mean(trace, na.rm=T)), by=list(city)]
+
+prop_trace <- prop_trace %>% arrange(V1)
+
+prop_trace <- prop_trace %>% rename(prop_days_trace = V1)
+
+prop_trace$prop_days_trace_rank <- 1:nrow(prop_trace)
+
+
+prop_trace <- prop_trace %>% arrange(city)
+
+head(prop_trace)
+```
+
+re_rank: Mean Absolute Rain Error rank
+Create new df precip_acc_city_pop which is PoP and proportion of rainy days at many cut points.
+Aggregate to precip_acc_city which is Mean Absolute Rain Error (MARE) by city.
+
+```{r}
+j <- 3
+
+for (i in seq(0, .1, .01)){
+  weather_export2 <- weather_export %>% 
+    mutate(Precip = PrecipIn >= i)
+  
+  weather_export2 <- as.data.table(weather_export2)
+  
+  pa <- weather_export2[,j=list(round(mean(Precip, na.rm=T)*100, 2)),
+                       by=list(city, ProbPrecip_forecast)] %>% 
+    arrange(city, ProbPrecip_forecast)
+  
+  if (j==3){
+    precip_acc_city_pop <- pa
+  }
+  else {
+    precip_acc_city_pop <- cbind(precip_acc_city_pop, pa[,3])
+  }
+  
+  colnames(precip_acc_city_pop)[j] <- paste("cp",i,sep="")
+  
+  j <- j+1
+}
+
+# Aggregate the PoP by city.
+precip_acc_city <- mutate(precip_acc_city_pop, re=abs(cp0.01-ProbPrecip_forecast)) # MARE calculation
+precip_acc_city <- as.data.table(precip_acc_city)
+precip_acc_city <- precip_acc_city[, j = list(re=mean(re, na.rm=T)),
+                                  by = list(city)]
+precip_acc_city <- arrange(precip_acc_city, desc(re))
+precip_acc_city$re_rank <- 1:nrow(precip_acc_city)
+
+head(precip_acc_city)
+```
+
+
+rain_metrics
+
+```{r}
+rain_metrics <- rainy %>% inner_join(rainpour, by="city") %>% inner_join(rain_per_year,on="city") %>% left_join(trace_rain, on="city") %>% inner_join(prop_trace, on="city") %>% inner_join(precip_acc_city,on="city")
+
+head(arrange(rain_metrics, city))
+
+#write.csv(rain_metrics, "data/rain_metrics.csv")
+```
+
+
+## Fig 1: Blue Map of Mean Rain Error
+
+Create Mean Rain Error metric (not MARE) for blue map.
+```{r}
+j <- 3
+
+for (i in seq(0, .1, .01)){
+  weather_export2 <- weather_export %>% 
+    mutate(Precip = PrecipIn >= i)
+  
+  weather_export2 <- as.data.table(weather_export2)
+  
+  pa <- weather_export2[,j=list(round(mean(Precip, na.rm=T)*100, 2)),
+                       by=list(city, ProbPrecip_forecast)] %>% 
+    arrange(city, ProbPrecip_forecast)
+  
+  if (j==3){
+    precip_acc_city_pop_re <- pa
+  }
+  else {
+    precip_acc_city_pop_re <- cbind(precip_acc_city_pop_re, pa[,3])
+  }
+  
+  colnames(precip_acc_city_pop_re)[j] <- paste("cp",i,sep="")
+  
+  j <- j+1
+}
+
+# Aggregate the PoP by city.
+# Mean Rain Error (MRE) calculation happens on line below. No abs() compared to MARE.
+re_city_blue <- mutate(precip_acc_city_pop_re, re=cp0.01-ProbPrecip_forecast) 
+re_city_blue <- as.data.table(re_city_blue)
+re_city_blue <- re_city_blue[, j = list(re=mean(re, na.rm=T)),
+                                  by = list(city)]
+re_city_blue <- arrange(re_city_blue, desc(re))
+re_city_blue$re_rank <- 1:nrow(re_city_blue)
+
+# Join city with lat and long
+re_city_blue <- re_city_blue %>% 
+  mutate(long = locations$longitude[match(city, locations$city)], 
+          lat = locations$latitude[match(city, locations$city)])
+```
+
+## Fig 3: Red Map of Mean Absolute Rain Error
+
+re_city_red_07: Export MARE of cp0.01 and co0.07 for Red Map. Look for generate1Map rmd.
+
+
+```{r}
+re_city_red_01 <- rain_metrics[,c("city","re")] %>% 
+  arrange(city) %>% 
+  mutate(long = locations$longitude[match(city, locations$city)], 
+          lat = locations$latitude[match(city, locations$city)])
+```
+
+Calculate MARe at 0.07 inch cut point.
+
+```{r}
+# Aggregate the PoP by city and create MARE metric
+re_city_red_07 <- mutate(precip_acc_city_pop, re=abs(cp0.07-ProbPrecip_forecast))
+re_city_red_07 <- as.data.table(re_city_red_07)
+re_city_red_07 <- re_city_red_07[, j = list(re=mean(re, na.rm=T)),
+                                  by = list(city)]
+re_city_red_07 <- arrange(re_city_red_07, desc(re))
+
+re_city_red_07 <- re_city_red_07 %>% 
+  arrange(city) %>% 
+  mutate(long = locations$longitude[match(city, locations$city)], 
+          lat = locations$latitude[match(city, locations$city)])
+```
+
+
+
+Clean up unused dataframes.
+
+```{r}
+rm(forecast, forecast_wide, rainy, rainpour, rain_per_year, prop_trace, trace_rain, precip_acc_city)
+```
