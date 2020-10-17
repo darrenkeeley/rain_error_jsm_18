@@ -1,0 +1,568 @@
+```{r}
+library(gridExtra)
+```
+
+## Fig 1: Blue Map of Mean Rain Error
+
+Create Rain Error metric for displaying how much ranier cities were than forecasted.
+
+```{r}
+# Precip: Rainy day indicator
+we <- weather_export %>% 
+  mutate(Precip = PrecipIn >= 0.01)
+
+we <- as.data.table(we)
+
+# V1: Proportion of rainy days by city & PropPrecipForecast
+precip_acc_map <- we[,j=list(mean(Precip, na.rm=T)*100),by=list(city, ProbPrecip_forecast)]
+
+# Rain Error (re): Difference between actual and forecast
+precip_acc_map$re <- precip_acc_map$V1 - precip_acc_map$ProbPrecip_forecast
+
+precip_acc_map <- precip_acc_map[,j=list(mean(re)), by=list(city)]
+
+# Join in lat and long
+precip_acc_map <- precip_acc_map %>% 
+  mutate(long = locations$longitude[match(city, locations$city)], 
+          lat = locations$latitude[match(city, locations$city)])
+
+colnames(precip_acc_map)[2] <- "re"
+
+write.csv(precip_acc_map, "data/re_city_blue.csv")
+```
+
+
+
+## Fig 2:  Different cut points
+As a loop to look at all different cutpoints (bc .01 in. of rain may not be noticeable)
+
+precip_acc is all cities averaged together. This is used in Fig 2.
+
+```{r}
+precip_acc <- tibble(ProbPrecip_forecast=seq(0,100,10))
+j <- 2
+
+for (i in seq(0, .10, .01)){
+  we <- weather_export %>% 
+    mutate(Precip = PrecipIn >= i)
+  
+  we <- as.data.table(we)
+  
+  pa <- we[,j=list(mean(Precip, na.rm=T)*100),
+                       by=list(ProbPrecip_forecast)] %>% 
+    arrange(ProbPrecip_forecast)
+  
+  precip_acc <- cbind(precip_acc, pa[,2])
+  
+  colnames(precip_acc)[j] <- paste("cp",i,sep="")
+  
+  j <- j+1
+}
+
+precip_acc[,-1] <- round(precip_acc[,-1],2)
+```
+
+
+Colors have to be alphabetical.
+
+```{r}
+p1 <- ggplot(precip_acc) +
+  geom_line(aes(x=ProbPrecip_forecast, y=cp0.01, color="#386cb0"), size=.8) +
+  geom_line(aes(x=ProbPrecip_forecast, y=cp0.06, color="#7fc97f"), size=.8) +
+  geom_line(aes(x=ProbPrecip_forecast, y=cp0.07, color="orange"), size=.8) +
+  geom_line(aes(x=ProbPrecip_forecast, y=cp0.08, color="tan"), size=.8) +
+  geom_abline(size=.8, linetype="dashed") +
+  theme_light() +
+  scale_colour_manual(name = 'cut point', 
+         values =c('#386cb0'='#386cb0','#7fc97f'='#7fc97f','orange'='orange', 'tan'='tan'), 
+         labels = c('cp0.01','cp0.06','cp0.07','cp0.08')) +
+  scale_x_continuous(breaks = seq(0,100,20),labels=paste0(seq(0,100,20),'%')) +
+  scale_y_continuous(breaks = seq(0,100,20),labels=paste0(seq(0,100,20),'%')) +
+  labs(x="Expected Proportion of Rainy Days", y="Actual Proportion of Rainy Days") +
+  theme(axis.title.x = element_text(size=17),
+        axis.title.y = element_text(size=17),
+        axis.text.x = element_text(size=14),
+        axis.text.y = element_text(size=14))
+
+p1
+
+#ggsave('C:/Google Drive/CSUEB/data_expo/final analysis/pics/new graphs/cut_points.jpeg', plot=p1, width=8, height=5.5)
+```
+
+Fig 2 without legend
+
+```{r}
+ggplot(precip_acc) +
+  geom_line(aes(x=ProbPrecip_forecast, y=cp0.01), color="#386cb0", size=.8) +
+  geom_line(aes(x=ProbPrecip_forecast, y=cp0.06), color="#7fc97f", size=.8) +
+  geom_line(aes(x=ProbPrecip_forecast, y=cp0.07), color="orange", size=.8) +
+  geom_line(aes(x=ProbPrecip_forecast, y=cp0.08), color="tan", size=.8) +
+  geom_abline(size=.8, linetype="dashed") +
+  theme_light() +
+  scale_x_continuous(breaks = seq(0,100,20), labels=paste0(seq(0,100,20),'%')) +
+  scale_y_continuous(breaks = seq(0,100,20), labels=paste0(seq(0,100,20),'%')) +
+  labs(x="Expected Proportion of Rainy Days", y="Actual Proportion of Rainy Days") +
+  theme(axis.title.x = element_text(size=17),
+        axis.title.y = element_text(size=17),
+        axis.text.x = element_text(size=14),
+        axis.text.y = element_text(size=14))
+```
+
+
+## Rain Metrics dataset
+
+Compare cities by rainy days per year, average precipitation per rainy day, precipitation per year, and avg rain error.
+
+rainy_days_py: Rainy days per year
+
+```{r}
+hist_weather_agg2 <- hist_weather_agg %>% 
+  mutate(Precip = PrecipIn >= .01) %>% 
+  as.data.table()
+
+rainy <- hist_weather_agg2[,j=list(mean(Precip, na.rm=T)*365),by=list(city)] %>% 
+  arrange(desc(V1))
+rainy <- rainy %>% rename(rainy_days_py = V1)
+
+rainy$rainy_days_py_rank <- 1:nrow(rainy)
+
+rainy <- arrange(rainy, city)
+
+head(rainy)
+```
+
+avg_precip_in: Avg in of rain on rainy days. Answers question, when it rains does it pour?
+
+```{r}
+rainpour <- filter(hist_weather_agg2, Precip==T)
+rainpour <- as.data.table(rainpour)
+
+rainpour <- rainpour[,j=list(mean(PrecipIn, na.rm=T)),by=list(city)] %>% 
+  arrange(desc(V1))
+rainpour <- rainpour %>% rename(avg_precip_in = V1)
+
+rainpour$avg_precip_in_rank <- 1:nrow(rainpour)
+
+rainpour <- arrange(rainpour, city)
+
+head(rainpour)
+```
+
+
+precip_in_py: Total inches of precipitation in a year. Sum of PrecipIn per year. Only two years have complete data: 2015 and 2016. Avg those two years. Rough estimate bc some days are missing. St. George also has no 2016 data. Answers question, what are the raniest cities?
+
+```{r}
+rain_per_year <- hist_weather_agg2 %>% 
+  filter(Date >= "2015-01-01", Date <= "2016-12-13") %>% 
+  as.data.table()
+
+rain_per_year <- rain_per_year[,j=list(mean(PrecipIn, na.rm=T)*365),by=list(city)] %>% 
+  arrange(desc(V1))
+rain_per_year <- rain_per_year %>% rename(precip_in_py = V1)
+
+rain_per_year$precip_in_py_rank <- 1:nrow(rain_per_year)
+
+rain_per_year <- arrange(rain_per_year, city)
+
+head(rain_per_year)
+```
+
+
+Number of trace rain days across all days in data (more than 1 year)
+
+```{r}
+trace_rain <- as.data.table(hist_weather[hist_weather$PrecipInT=='T',])
+trace_rain <- data.frame(table(trace_rain$city))
+colnames(trace_rain) <- c("city", "count_trace_days")
+
+trace_rain <- arrange(trace_rain, desc(count_trace_days))
+trace_rain$count_trace_days_rank <- 1:nrow(trace_rain)
+
+head(trace_rain)
+```
+
+
+Proportion of Trace rain days.
+
+```{r}
+prop_trace <- hist_weather
+prop_trace$trace <- prop_trace$PrecipInT == 'T'
+prop_trace <- as.data.table(prop_trace)
+prop_trace <- prop_trace[,j=list(mean(trace, na.rm=T)), by=list(city)]
+
+prop_trace <- prop_trace %>% arrange(V1)
+
+prop_trace <- prop_trace %>% rename(prop_days_trace = V1)
+
+prop_trace$prop_days_trace_rank <- 1:nrow(prop_trace)
+
+
+prop_trace <- prop_trace %>% arrange(city)
+
+head(prop_trace)
+```
+
+re_rank: Mean Absolute Rain Error rank
+Create new df precip_acc_city_pop which is PoP and proportion of rainy days at many cut points.
+Aggregate to precip_acc_city which is Absolute Rain Error by city.
+
+```{r}
+j <- 3
+
+for (i in seq(0, .1, .01)){
+  weather_export <- weather_export %>% 
+    mutate(Precip = PrecipIn >= i)
+  
+  weather_export <- as.data.table(weather_export)
+  
+  pa <- weather_export[,j=list(round(mean(Precip, na.rm=T)*100, 2)),
+                       by=list(city, ProbPrecip_forecast)] %>% 
+    arrange(city, ProbPrecip_forecast)
+  
+  if (j==3){
+    precip_acc_city_pop <- pa
+  }
+  else {
+    precip_acc_city_pop <- cbind(precip_acc_city_pop, pa[,3])
+  }
+  
+  colnames(precip_acc_city_pop)[j] <- paste("cp",i,sep="")
+  
+  j <- j+1
+}
+
+# Aggregate the PoP by city.
+precip_acc_city <- mutate(precip_acc_city_pop, re=abs(cp0.01-ProbPrecip_forecast))
+precip_acc_city <- as.data.table(precip_acc_city)
+precip_acc_city <- precip_acc_city[, j = list(re=mean(re, na.rm=T)),
+                                  by = list(city)]
+precip_acc_city <- arrange(precip_acc_city, desc(re))
+precip_acc_city$re_rank <- 1:nrow(precip_acc_city)
+
+head(precip_acc_city)
+```
+
+
+rain_metrics
+
+```{r}
+rain_metrics <- rainy %>% inner_join(rainpour, by="city") %>% inner_join(rain_per_year,on="city") %>% left_join(trace_rain, on="city") %>% inner_join(prop_trace, on="city") %>% inner_join(precip_acc_city,on="city")
+
+head(arrange(rain_metrics, city))
+
+#write.csv(rain_metrics, "data/rain_metrics.csv")
+```
+
+## Table 1: MARE by city
+
+Code for Table 1. Calculate MARE by city for cut point = 0.01.
+
+```{r}
+precip_acc_city <- arrange(precip_acc_city, city)
+
+#write.csv(table1.csv')
+```
+
+
+
+## Correlation between rainiest cities and least accurate cities.
+
+Aggregate all vars to find means. Means of metrics for top 10 cities is x.
+This isn't really used.
+
+```{}
+hist_agg_city <- hist_weather_agg2[, j = list(MaxTemp=mean(MaxTemp, na.rm=T), MinTemp=mean(MinTemp, na.rm=T), 
+                                  Max_Dew_PointF=mean(Max_Dew_PointF, na.rm=T), 
+                                  MeanDew_PointF=mean(MeanDew_PointF, na.rm=T),
+                                  Min_DewpointF=mean(Min_DewpointF, na.rm=T), 
+                                  Max_Humidity=mean(Max_Humidity, na.rm=T),
+                                  Mean_Humidity=mean(Mean_Humidity, na.rm=T), 
+                                  Min_Humidity=mean(Min_Humidity, na.rm=T),
+                                  Max_Sea_Level_PressureIn=mean(Max_Sea_Level_PressureIn, na.rm=T),
+                                  Mean_Sea_Level_PressureIn=mean(Mean_Sea_Level_PressureIn, na.rm=T),
+                                  Min_Sea_Level_PressureIn=mean(Min_Sea_Level_PressureIn, na.rm=T), 
+                                  Max_VisibilityMiles=mean(Max_VisibilityMiles, na.rm=T),
+                                  Mean_VisibilityMiles=mean(Mean_VisibilityMiles, na.rm=T), 
+                                  Min_VisibilityMiles=mean(Min_VisibilityMiles, na.rm=T),
+                                  Max_Wind_SpeedMPH=mean(Max_Wind_SpeedMPH, na.rm=T), 
+                                  Mean_Wind_SpeedMPH=mean(Mean_Wind_SpeedMPH, na.rm=T),
+                                  Max_Gust_SpeedMPH=mean(Max_Gust_SpeedMPH, na.rm=T), 
+                                  PrecipIn=mean(PrecipIn, na.rm=T), CloudCover=mean(CloudCover, na.rm=T),
+                                  WindDirDegrees=mean(WindDirDegrees, na.rm=T)),
+                                  by = list(city)]
+
+hist_agg_city <- arrange(hist_agg_city, city)
+```
+
+```{}
+hist_agg_city <- as.data.table(hist_agg_city)
+all_means <- hist_agg_city[, j = list(MaxTemp=mean(MaxTemp, na.rm=T), MinTemp=mean(MinTemp, na.rm=T), 
+                                  Max_Dew_PointF=mean(Max_Dew_PointF, na.rm=T), 
+                                  MeanDew_PointF=mean(MeanDew_PointF, na.rm=T),
+                                  Min_DewpointF=mean(Min_DewpointF, na.rm=T), 
+                                  Max_Humidity=mean(Max_Humidity, na.rm=T),
+                                  Mean_Humidity=mean(Mean_Humidity, na.rm=T), 
+                                  Min_Humidity=mean(Min_Humidity, na.rm=T),
+                                  Max_Sea_Level_PressureIn=mean(Max_Sea_Level_PressureIn, na.rm=T),
+                                  Mean_Sea_Level_PressureIn=mean(Mean_Sea_Level_PressureIn, na.rm=T),
+                                  Min_Sea_Level_PressureIn=mean(Min_Sea_Level_PressureIn, na.rm=T), 
+                                  Max_VisibilityMiles=mean(Max_VisibilityMiles, na.rm=T),
+                                  Mean_VisibilityMiles=mean(Mean_VisibilityMiles, na.rm=T), 
+                                  Min_VisibilityMiles=mean(Min_VisibilityMiles, na.rm=T),
+                                  Max_Wind_SpeedMPH=mean(Max_Wind_SpeedMPH, na.rm=T), 
+                                  Mean_Wind_SpeedMPH=mean(Mean_Wind_SpeedMPH, na.rm=T),
+                                  Max_Gust_SpeedMPH=mean(Max_Gust_SpeedMPH, na.rm=T), 
+                                  PrecipIn=mean(PrecipIn, na.rm=T), CloudCover=mean(CloudCover, na.rm=T),
+                                  WindDirDegrees=mean(WindDirDegrees, na.rm=T))]
+
+all_means$city <- "all"
+
+hist_agg_city2 <- rbind(hist_agg_city, all_means)
+
+x <- hist_agg_city[,-1] - all_means[rep(1,108),-21]
+x <- cbind(hist_agg_city[,1], x)
+
+
+
+x <- filter(x, city %in% c("Springfield", "Portland", "Hoquiam", "Honolulu", "Charleston", "Miami", "San Francisco", "Sault Ste Marie", "Wilmington", "Grand Junction"))
+
+
+#x <- filter(x, city %in% c("Honolulu", "Salmon", "Carlsbad", "Provo", "Baker", "St George", "Helena", "Santa Fe", "Needles", "Anchorage", "San Diego"))
+```
+
+Scaled version
+
+```{}
+hist_agg_city_norm <- scale(hist_agg_city[,-1])
+hist_agg_city_norm <- cbind(hist_agg_city[,1], hist_agg_city_norm)
+
+y <- filter(hist_agg_city_norm, city %in% c("Springfield", "Portland", "Hoquiam", "Honolulu", "Charleston", "Miami", "San Francisco", "Sault Ste Marie", "Wilmington", "Grand Junction"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Fig 3: Red Map of Mean Absolute Rain Error
+
+re_city: Export MARE of cp0.01 and co0.07 for Red Map. Look for generate1Map rmd.
+
+For 0.01in cp map.
+```{r}
+mare_city_01 <- precip_acc_city %>% 
+  mutate(long = locations$longitude[match(city, locations$city)], 
+          lat = locations$latitude[match(city, locations$city)])
+
+write.csv(mare_city_01, "data/mare_city_01.csv")
+```
+
+
+For 0.07in cp map.
+
+```{r}
+# Aggregate the PoP by city and create MARE metric
+precip_acc_city7 <- mutate(precip_acc_city_pop, re=abs(cp0.07-ProbPrecip_forecast))
+precip_acc_city7 <- as.data.table(precip_acc_city7)
+precip_acc_city7 <- precip_acc_city7[, j = list(re=mean(re, na.rm=T)),
+                                  by = list(city)]
+precip_acc_city7 <- arrange(precip_acc_city7, desc(re))
+precip_acc_city7$re_rank <- 1:nrow(precip_acc_city7)
+
+head(precip_acc_city7)
+
+precip_acc_city7 <- precip_acc_city7 %>% 
+  arrange(city) %>% 
+  mutate(long = locations$longitude[match(city, locations$city)], 
+          lat = locations$latitude[match(city, locations$city)])
+
+#write.csv(precip_acc_city7, "data/precip_acc_city7.csv")
+```
+
+
+
+
+
+
+## Fig 10: Expected Proportion of Rainy Days vs Actual Proportion by City
+
+Functions to generate graphs and then save them as jpeg in "pics" folder.
+
+Vectors of Most and Least Accurate Cities
+
+c("Springfield", "Portland", "Hoquiam", "Honolulu", "Charleston", "Miami", "San Francisco", "Sault Ste Marie", "Wilmington", "Grand Junction")
+
+c("Honolulu", "Salmon", "Carlsbad", "Provo", "Baker", "St George", "Helena", "Santa Fe", "Needles", "Anchorage", "San Diego")
+
+
+```{r}
+# Graph generator function
+
+rain_graph <- function(df, legend=T){
+  if (legend==T) {
+    ggplot(df) +
+    geom_line(aes(x=ProbPrecip_forecast, y=cp0.01, color="#386cb0"), size=.8) +
+    geom_line(aes(x=ProbPrecip_forecast, y=cp0.07, color="orange"), size=.8) +
+    geom_abline(size=.8, linetype="dashed") +
+    ggtitle(df$city[1]) +
+    theme_light() +
+    scale_colour_manual(name = 'cut point', 
+           values =c('#386cb0'='#386cb0','orange'='orange'), 
+           labels = c('cp0.01','cp0.07')) +
+    scale_x_continuous(breaks = seq(0,100,20)) +
+    scale_y_continuous(breaks = seq(0,100,20)) +
+    labs(x="Expected Proportion of Rainy Days", y="Actual Proportion of Rainy Days") +
+    theme(axis.title.x = element_text(size=12),
+          axis.title.y = element_text(size=12),
+          axis.text.x = element_text(size=14),
+          axis.text.y = element_text(size=14),
+          plot.title = element_text(size = 17, face = "bold"))
+    
+  } else {
+    ggplot(df) +
+    geom_line(aes(x=ProbPrecip_forecast, y=cp0.01), color="#386cb0", size=.8) +
+    geom_line(aes(x=ProbPrecip_forecast, y=cp0.07), color="orange", size=.8) +
+    geom_abline(size=.8, linetype="dashed") +
+    ggtitle(df$city[1]) +
+    theme_light() +
+    scale_x_continuous(breaks = seq(0,100,20)) +
+    scale_y_continuous(breaks = seq(0,100,20)) +
+    labs(x="Expected Proportion of Rainy Days", y="Actual Proportion of Rainy Days") +
+    theme(axis.title.x = element_text(size=12),
+          axis.title.y = element_text(size=12),
+          axis.text.x = element_text(size=14),
+          axis.text.y = element_text(size=14),
+          plot.title = element_text(size = 17, face = "bold"))
+  }
+}
+
+# Requires a pics folder to already exist
+rain_graph_duo <- function(city1,city2,save_jpeg=T){
+  df1 <- filter(precip_acc3, city == city1)
+  p1 <- rain_graph(df1,legend=F)
+  df2 <- filter(precip_acc3, city == city2)
+  p2 <- rain_graph(df2,legend=T)
+  
+  p_grid <- grid.arrange(p1,p2, nrow=1, ncol=2, widths=c(2.5,3))
+  
+  jpeg_filepath <- sprintf('pics/duo_%s_%s.jpeg',city1,city2)
+  
+  if (save_jpeg==T){
+    ggsave(jpeg_filepath, plot=p_grid, width=12, height=5.5)
+  } else {p_grid}
+}
+
+```
+
+Run graph generators.
+
+```{r}
+rain_graph_duo("Seattle","Sacramento")
+
+rain_graph_duo("Honolulu","Salmon")
+
+rain_graph_duo("Springfield","Portland")
+```
+
+
+
+
+
+
+Distribution of rain error. Seems like anything above 18 is in the far right tail, which is only the top 5 re cities.
+
+```{}
+ggplot(precip_acc_city_norm) +
+  geom_density(aes(x=re)) +
+  theme_bw()
+
+ggplot(precip_acc_city) +
+  geom_density(aes(x=re)) +
+  theme_bw()
+```
+
+
+
+
+
+
+
+```{}
+rain_ranks_graph <- rain_ranks
+rain_ranks_graph$rainy_days_py <- 108 - rain_ranks_graph$rainy_days_py
+rain_ranks_graph$avg_precip_in <- 108 - rain_ranks_graph$avg_precip_in
+rain_ranks_graph <- arrange(rain_ranks_graph, re_rank)[1:5, -c(4)]
+rain_ranks_graph <- melt(rain_ranks_graph, id=c("city","re_rank"))
+
+
+ggplot(rain_ranks_graph) + 
+  geom_bar(mapping=aes(x=reorder(city, re_rank), y=value, fill=variable), stat="identity", position="dodge") +
+  theme_light()
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Trace amounts of rain
+
+```{r}
+ggplot(rain_metrics, aes(x=reorder(city,desc(count_trace_days)), y=count_trace_days)) +
+  geom_col() +
+  theme_light() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+
+summary(rain_metrics$prop_days_trace)
+```
+
+
+
+```{}
+rain_ranks2 <- left_join(rain_ranks, trace_rain[,c(1,3)], c("city"="city"))
+
+rain_ranks_graph <- rain_ranks2
+rain_ranks_graph$rainy_days_py <- 108 - rain_ranks_graph$rainy_days_py
+rain_ranks_graph$avg_precip_in <- 108 - rain_ranks_graph$avg_precip_in
+rain_ranks_graph$trace_rank<- 76 - rain_ranks_graph$trace_rank
+rain_ranks_graph <- arrange(rain_ranks_graph, re_rank)[1:5, -c(4)]
+rain_ranks_graph <- melt(rain_ranks_graph, id=c("city","re_rank"))
+
+
+ggplot(rain_ranks_graph) + 
+  geom_bar(mapping=aes(x=reorder(city, re_rank), y=value, fill=variable), stat="identity", position="dodge") +
+  theme_light()
+```
