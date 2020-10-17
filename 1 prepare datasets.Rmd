@@ -1,6 +1,6 @@
-# Preparing data for Rain Analysis
+# 1. Preparing Data for Rain Analysis
 
-Objective: Join the forecasts (forecast.dat) and actuals (histWeather.csv) in preparation for analysis of forecast accuracy.
+Prepare most of the dataframes used for analysis, graphs and maps. Before running, a folder called "data" should be created that contains the data from the competition: histWeather.csv, forecast.dat, and locations.csv.
 
 ```{r, results='hide', message=FALSE, warning=FALSE}
 library(tidyverse); library(data.table)
@@ -15,6 +15,8 @@ locations <- fread("data/locations.csv")
 
 
 ## Prepare Forecast data
+
+Objective: Join the forecasts (forecast.dat) and actuals (histWeather.csv) in preparation for analysis of forecast accuracy.
 
 Add column names and then new column for city names (city names come from "locations" dataframe).
 ```{r}
@@ -52,7 +54,6 @@ forecast_2 <- filter(forecast_2, Days_out > -1)
 #Rename columns
 colnames(forecast_2) <- c("city", "target_date", "date_of_forecast", "ProbPrecip_forecast", "Days_out")
 ```
-
 
 
 ## Prepare historical weather data (actuals)
@@ -119,7 +120,6 @@ hist_weather_agg <- hist_weather[, j = list(MaxTemp=mean(MaxTemp, na.rm=T), MinT
                                   WindDirDegrees=mean(WindDirDegrees, na.rm=T)),
                                   by = list(city, Date)]
 ```
-
 
 
 Remove cloud cover outlier. 1 obs is -440, compared to all other values which are between 0 and 8.
@@ -271,7 +271,6 @@ precip_acc_city$re_rank <- 1:nrow(precip_acc_city)
 head(precip_acc_city)
 ```
 
-
 rain_metrics
 
 ```{r}
@@ -281,7 +280,6 @@ head(arrange(rain_metrics, city))
 
 #write.csv(rain_metrics, "data/rain_metrics.csv")
 ```
-
 
 ## Fig 1: Blue Map of Mean Rain Error
 
@@ -353,8 +351,6 @@ re_city_red_07 <- re_city_red_07 %>%
   mutate(long = locations$longitude[match(city, locations$city)], 
           lat = locations$latitude[match(city, locations$city)])
 ```
-
-
 
 Clean up unused dataframes.
 

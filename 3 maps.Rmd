@@ -1,10 +1,6 @@
----
-title: "Map generator"
----
-This file generates the png's used in the weather map.
+# 3. Maps
 
-There are some big outliers that reduce the precision of the colors. Floor/ceiling points that are outside [.025, .975].
-
+This file generates the map png's.
 
 ```{r, message=F}
 library(maptools); library(sp); library(gstat); library(ggplot2); library(png); library(readr); library(tidyverse)
@@ -14,7 +10,7 @@ states <- readShapePoly("data/statesp020.shp")
 
 ## Fig 1: Blue Map
 
-Generate Single Map for blue
+Generate Single Map for blue. There are some big outliers that reduce the precision of the colors. Floor/ceiling points that are outside [.025, .975].
 
 ```{r}
 generate_blue_map <- function(df, map_name="some map"){
@@ -82,8 +78,6 @@ generate_blue_map <- function(df, map_name="some map"){
 ```{r}
 generate_blue_map(re_city_blue, "blue map")
 ```
-
-
 
 ## Fig 3: Red Maps
 Generate Single Map for red

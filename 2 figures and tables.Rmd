@@ -1,3 +1,9 @@
+# 2. Figures
+
+Most of the graphics along with Table 1 are created here. Has some dataframe creation for specific graphics.
+
+A folder named "pics" needs to be created in the same directory as this script or else the save functions will error.
+
 ```{r}
 library(gridExtra)
 ```
@@ -55,7 +61,7 @@ p1 <- ggplot(precip_acc) +
 
 p1
 
-#ggsave('C:/Google Drive/CSUEB/data_expo/final analysis/pics/new graphs/cut_points.jpeg', plot=p1, width=8, height=5.5)
+ggsave('pics/fig02 different cut points.jpeg', plot=p1, width=8, height=5.5)
 ```
 
 Fig 2 without legend
@@ -85,12 +91,8 @@ Code for Table 1. Calculate MARE by city for cut point = 0.01.
 ```{r}
 table_1 <- rain_metrics[,c('city','re','re_rank')] %>% arrange(city)
 
-#write.csv(table_1,'table1.csv')
+write.csv(table_1,'table01 rain error.csv')
 ```
-
-
-
-
 
 
 ## Fig 4: Forecast horizon and Rain Error
@@ -107,7 +109,7 @@ j <- 2
 for (i in seq(0, 6)){
   weather_export_do <- weather_export %>% 
     filter(Days_out==i) %>% 
-    #mutate(Precip = PrecipIn >= 0.01) %>% 
+    mutate(Precip = PrecipIn >= 0.01) %>% 
     as.data.table()
   
   pa <- weather_export_do[,j=list(round(mean(Precip, na.rm=T)*100, 2)),
@@ -128,7 +130,7 @@ for (i in seq(0, 6)){
 
 #Be mindful of parenthesis in geom_line with regards to color, as well as scale_colour_manual alphabetizing colors.
 
-ggplot(precip_acc_do) +
+p1 <- ggplot(precip_acc_do) +
   geom_line(aes(x=ProbPrecip_forecast, y=do0,
             color="#d0d1e6"), size=.8) +
   geom_line(aes(x=ProbPrecip_forecast, y=do1,
@@ -155,6 +157,8 @@ ggplot(precip_acc_do) +
         axis.title.y = element_text(size=17),
         axis.text.x = element_text(size=14),
         axis.text.y = element_text(size=14))
+
+ggsave('pics/fig04 days out.jpeg', plot=p1, width=8, height=5.5)
 ```
 
 Table of RE by DO
@@ -173,6 +177,7 @@ re_table_do <- tibble(
 )
 ```
 ## Correlation between Number of Rainy Days and MARE
+
 ```{r}
 cor(rain_metrics[,c("rainy_days_py","re")])
 psych::corr.test(rain_metrics[,c("rainy_days_py","re")])
@@ -187,6 +192,7 @@ psych::corr.test(rain_metrics[-(1:5),c("rainy_days_py","re")])
 ## Fig 5: Scatter of Number of Rainy Days by MARE
 
 Scatter
+
 ```{r}
 p1 <- ggplot(rain_metrics) +
   geom_point(aes(x=rainy_days_py, y=re), size=2) +
@@ -200,11 +206,12 @@ p1 <- ggplot(rain_metrics) +
 
 p1
 
-#ggsave('pics/mare by nbr rainy days.jpeg', plot=p1,width=7, height=6)
+ggsave('pics/fig05 mare by nbr rainy days.jpeg', plot=p1,width=7, height=6)
 ```
 
 
 ## Fig 6: Least accurate cities (Blue purple graphs)
+
 Comparing rainy days per year and inches of rain per rainy day for highest Rain Error cities.
 
 ```{r}
@@ -236,13 +243,14 @@ p1 <- ggplot(rain_graph %>% top_n(20,re)) +
 
 p1
 
-#ggsave('C:/Google Drive/CSUEB/data_expo/final analysis/pics/new graphs/most accurate cities bar.jpeg', plot=p1, width=8.5, height=6)
+ggsave('pics/fig06 most accurate cities bar.jpeg', plot=p1, width=8.5, height=6)
 ```
 
 
 
 
 ## Fig 7: Most accurate cities
+
 Comparing rainy days per year and inches of rain per rainy day for lowest Rain Error cities.
 
 ```{r}
@@ -265,7 +273,7 @@ p1 <- ggplot(rain_graph %>% top_n(20,desc(re))) +
 
 p1
 
-#ggsave('C:/Google Drive/CSUEB/data_expo/final analysis/pics/new graphs/least accurate cities bar.jpeg', plot=p1, width=8.5, height=6)
+ggsave('pics/fig07 least accurate cities bar.jpeg', plot=p1, width=8.5, height=6)
 ```
 
 
@@ -322,7 +330,7 @@ rain_graph <- function(df, legend=T){
 }
 
 # Requires a pics folder to already exist
-rain_graph_duo <- function(city1,city2,save_jpeg=T){
+rain_graph_duo <- function(city1, city2, fig_num="", save_jpeg=T){
   df1 <- filter(precip_acc_city_pop, city == city1)
   p1 <- rain_graph(df1,legend=F)
   df2 <- filter(precip_acc_city_pop, city == city2)
@@ -330,8 +338,9 @@ rain_graph_duo <- function(city1,city2,save_jpeg=T){
   
   p_grid <- grid.arrange(p1,p2, nrow=1, ncol=2, widths=c(2.5,3))
   
-  jpeg_filepath <- sprintf('pics/duo_%s_%s.jpeg',city1,city2)
-  
+  jpeg_filepath <- paste("pics/",fig_num," ", city1, " ", city2, ".jpeg", sep = "")
+
+# save is here  
   if (save_jpeg==T){
     ggsave(jpeg_filepath, plot=p_grid, width=12, height=5.5)
   } else {p_grid}
@@ -342,9 +351,9 @@ rain_graph_duo <- function(city1,city2,save_jpeg=T){
 Run graph generators.
 
 ```{r}
-rain_graph_duo("Seattle","Sacramento")
+rain_graph_duo("Seattle","Sacramento","fig08")
 
-rain_graph_duo("Honolulu","Salmon")
+rain_graph_duo("Honolulu","Salmon","fig09")
 
-rain_graph_duo("Springfield","Portland")
+rain_graph_duo("Springfield","Portland","fig10")
 ```
