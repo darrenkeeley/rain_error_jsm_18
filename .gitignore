@@ -1,4 +1,5 @@
-data
+data/*
+!data/statesp020.shp
 pics
 Keeley_Suess_precipitation12.pdf
 debug.log
