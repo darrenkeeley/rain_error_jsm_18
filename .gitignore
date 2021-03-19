@@ -1,5 +1,8 @@
 data/*
 !data/statesp020.shp
+!data/statesp020.dbf
+!data/statesp020.shx
+!data/statesp020.txt
 pics
 Keeley_Suess_precipitation12.pdf
 debug.log
